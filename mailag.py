@@ -9,11 +9,11 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 
 from gmail import get_emails
+# pylint: disable=unused-import
 from models import gemini, ollama
 
-# pylint: disable=unused-import
 # flake8: noqa: F401
-llm = ollama  # or gemini
+llm = ollama  # or gemini, or any other model you want to use
 # llm = gemini  # Uncomment to use Gemini model
 
 print("LLM initialized:", llm)
