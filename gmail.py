@@ -119,7 +119,7 @@ def get_emails(gmail_query: str = "to:me in:Inbox", count: int = 50, page: int =
             logger.info(f"Found {len(messages)} messages for query: {query}")
             result = f"Found {len(messages)} messages for query: {query}\n"
             result += "--- Email Report ---\n"
-            for message in messages[(page - 1) * count : page * count]:
+            for message in messages[(page - 1) * count: page * count]:
                 logger.debug(f"Fetching details for message ID: {message['id']}")
                 msg = service.users().messages().get(userId="me", id=message["id"]).execute()
                 headers = msg["payload"]["headers"]

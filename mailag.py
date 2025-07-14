@@ -12,7 +12,10 @@ from langchain_core.prompts import PromptTemplate
 from models import gemini, ollama
 
 
-llm = ollama
+# pylint: disable=unused-import
+# flake8: noqa: F401
+llm = ollama  # or gemini
+# llm = gemini  # Uncomment to use Gemini model
 
 print("LLM initialized:", llm)
 
