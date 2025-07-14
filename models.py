@@ -1,6 +1,7 @@
+"""This module initializes and configures the language models."""
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import ChatOllama
-
 
 gemini = ChatGoogleGenerativeAI(
     model="gemini-2.5-pro",

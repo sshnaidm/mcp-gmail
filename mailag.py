@@ -1,20 +1,19 @@
-#!/usr/bin/env python3
+"""This module provides a Gradio chat interface for an AI email assistant."""
 
 import datetime
-import gradio as gr
-from gmail import get_emails
 
+import gradio as gr
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 
+from gmail import get_emails
+# pylint: disable=unused-import
 from models import gemini, ollama
 
-
-# pylint: disable=unused-import
 # flake8: noqa: F401
-llm = ollama  # or gemini
+llm = ollama  # or gemini, or any other model you want to use
 # llm = gemini  # Uncomment to use Gemini model
 
 print("LLM initialized:", llm)
@@ -24,12 +23,15 @@ AI_SYSTEM_PROMPT = """
 You are helpful AI assistant that helps with managing mails, docs, calendar, and other tasks.
 You are able to use tools to answer questions and perform actions.
 You have access to the following tools:
-1. **gmail_search**: Search for emails in Gmail.
+1. **list_tools**: List the available tools.
+    Input: {}
+    Output: The list of available tools.
+2. **gmail_search**: Search for emails in Gmail.
     Input: {"query": "in:inbox subject:meeting"}
     Input: {"query": "from:user in:inbox", count: 50, page: 1, full_body: True}
     Input: {"query": "to:me", count: 50}
     Output: The list of emails matching the query with snippets or full text.
-2. **get_todays_date**: Get today's date in YYYY-MM-DD format.
+3. **get_todays_date**: Get today's date in YYYY-MM-DD format.
     Input: {}
     Output: The current date in YYYY-MM-DD format.
 """
@@ -41,6 +43,9 @@ def gmail_search_tool(query: str, count: int = 50, page: int = 1, full_body: boo
 
     Args:
         query (str): The search query to filter emails.
+        count (int): The number of emails to return.
+        page (int): The page number of the results.
+        full_body (bool): Whether to return the full body of the email.
 
     Returns:
         str: A formatted string containing the search results.
@@ -48,24 +53,39 @@ def gmail_search_tool(query: str, count: int = 50, page: int = 1, full_body: boo
     if not isinstance(count, int):
         try:
             count = int(count)
-        except ValueError:
-            raise Exception("count must be an integer.")
+        except ValueError as exc:
+            raise TypeError("count must be an integer.") from exc
     if not isinstance(page, int):
         try:
             page = int(page)
-        except ValueError:
-            raise Exception("page must be an integer.")
+        except ValueError as exc:
+            raise TypeError("page must be an integer.") from exc
     if not isinstance(full_body, bool):
         try:
             full_body = bool(full_body)
-        except ValueError:
-            raise Exception("full_body must be a boolean.")
+        except ValueError as exc:
+            raise TypeError("full_body must be a boolean.") from exc
 
     # Call the get_emails function with the provided query
     return get_emails(gmail_query=query, count=count, page=page, full_body=full_body)
 
 
+def list_tools() -> str:
+    """
+    List the available tools.
+
+    Returns:
+        str: A formatted string containing the list of available tools.
+    """
+    return "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
+
+
 tools = [
+    Tool(
+        name="list_tools",
+        func=lambda x: list_tools(),
+        description="List the available tools.",
+    ),
     Tool(
         name="gmail_search",
         func=gmail_search_tool,
@@ -166,7 +186,7 @@ def chat(message, history):
         total = round((end - start).total_seconds(), 2)
         yield final_answer + f"\n\nTotal time: {total} seconds"
 
-    except Exception as e:
+    except (ValueError, TypeError) as e:
         error_msg = f"❌ Error: {str(e)}"
         print(f"DEBUG: Exception occurred: {e}")
         yield error_msg
@@ -180,4 +200,4 @@ with gr.Blocks() as demo:
         save_history=True,
     )
 
-demo.launch(server_port=5007)
+demo.launch(server_port=5000)

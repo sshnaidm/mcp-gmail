@@ -1,8 +1,10 @@
+"""This module provides a function to fetch emails from a Gmail account."""
+
+import ast
 import base64
 import json
-import os
 import logging
-import ast
+import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -51,6 +53,7 @@ def get_message_body(payload: dict) -> str:
     return ""  # Return empty string if no plain text part is found
 
 
+# pylint: disable=too-many-locals,too-many-statements
 def get_emails(gmail_query: str = "to:me in:Inbox", count: int = 50, page: int = 1, full_body: bool = False):
     """Fetches emails based on the provided query.
     Args:
@@ -62,8 +65,7 @@ def get_emails(gmail_query: str = "to:me in:Inbox", count: int = 50, page: int =
         str: A formatted string containing emails details.
     """
     logger.info(
-        f"Starting get_emails with gmail_query='{gmail_query}' count='{count}' "
-        f"page='{page}', full_body='{full_body}'"
+        f"Starting get_emails with gmail_query='{gmail_query}' count='{count}' page='{page}', full_body='{full_body}'"
     )
     if gmail_query.strip().startswith("{") and gmail_query.strip().endswith("}"):
         # params = json.loads(gmail_query.strip())
@@ -98,7 +100,7 @@ def get_emails(gmail_query: str = "to:me in:Inbox", count: int = 50, page: int =
             flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open("token.json", "w") as token:
+        with open("token.json", "w", encoding="utf-8") as token:
             logger.info("Saving new credentials to token.json.")
             token.write(creds.to_json())
 
@@ -108,32 +110,31 @@ def get_emails(gmail_query: str = "to:me in:Inbox", count: int = 50, page: int =
 
         # Get a list of messages
         logger.info(f"Executing search with query: {query}")
-        results = service.users().messages().list(userId="me", q=query).execute()
+        results = service.users().messages().list(userId="me", q=query).execute()  # pylint: disable=no-member
 
         messages = results.get("messages", [])
 
         if not messages:
             logger.warning(f"No messages found for query: {query}")
             return f"No messages found for query: {query}"
-        else:
-            logger.info(f"Found {len(messages)} messages for query: {query}")
-            result = f"Found {len(messages)} messages for query: {query}\n"
-            result += "--- Email Report ---\n"
-            for message in messages[(page - 1) * count: page * count]:
-                logger.debug(f"Fetching details for message ID: {message['id']}")
-                msg = service.users().messages().get(userId="me", id=message["id"]).execute()
-                headers = msg["payload"]["headers"]
-                headers_dict = {header["name"]: header["value"] for header in headers}
-                result += "#" * 10 + f" Message ID: {msg['id']} " + "#" * 10
-                result += f"\nFrom: {headers_dict.get('From', 'Unknown Sender')}\n"
-                result += f"Subject: {headers_dict.get('Subject', 'No Subject')}\n"
-                if full_body:
-                    body = get_message_body(msg["payload"])
-                    result += f"Mail body: {body}\n"
-                else:
-                    result += f"Snippet: {msg.get('snippet', 'No snippet available')}\n"
-            return result
-    except Exception as e:
+        logger.info(f"Found {len(messages)} messages for query: {query}")
+        result = f"Found {len(messages)} messages for query: {query}\n"
+        result += "--- Email Report ---\n"
+        for message in messages[(page - 1) * count: page * count]:
+            logger.debug(f"Fetching details for message ID: {message['id']}")
+            msg = service.users().messages().get(userId="me", id=message["id"]).execute()  # pylint: disable=no-member
+            headers = msg["payload"]["headers"]
+            headers_dict = {header["name"]: header["value"] for header in headers}
+            result += "#" * 10 + f" Message ID: {msg['id']} " + "#" * 10
+            result += f"\nFrom: {headers_dict.get('From', 'Unknown Sender')}\n"
+            result += f"Subject: {headers_dict.get('Subject', 'No Subject')}\n"
+            if full_body:
+                body = get_message_body(msg["payload"])
+                result += f"Mail body: {body}\n"
+            else:
+                result += f"Snippet: {msg.get('snippet', 'No snippet available')}\n"
+        return result
+    except (ValueError, FileNotFoundError) as e:
         logger.error(f"An error occurred: {e}", exc_info=True)
         return f"An error occurred while fetching emails: {e}"
 

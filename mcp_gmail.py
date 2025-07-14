@@ -1,3 +1,5 @@
+"""This module provides a FastMCP tool for fetching emails from Gmail."""
+
 import os
 
 from fastmcp import FastMCP
@@ -5,14 +7,20 @@ from pydantic import Field, ValidationError
 
 from gmail import get_emails
 
-if not os.getenv("CREDENTIALS_FILE"):
-    raise ValueError("CREDENTIALS_FILE environment variable is not set.")
-
 # Initialize FastMCP server
 mcp = FastMCP(
     name="gmail_mails",
     instructions="Fetch emails from Gmail using the Gmail API and search mails query.",
 )
+
+
+@mcp.tool(
+    name="List Available Tools",
+    description="List all available tools.",
+)
+def list_tools() -> str:
+    """List all available tools."""
+    return mcp.list_tools()  # type: ignore # pylint: disable=no-member
 
 
 @mcp.tool(
@@ -54,18 +62,18 @@ def get_emails_tool(
     if not isinstance(count, int):
         try:
             count = int(count)
-        except ValueError:
-            raise ValidationError("count must be an integer.")
+        except ValueError as exc:
+            raise ValidationError("count must be an integer.") from exc
     if not isinstance(page, int):
         try:
             page = int(page)
-        except ValueError:
-            raise ValidationError("page must be an integer.")
+        except ValueError as exc:
+            raise ValidationError("page must be an integer.") from exc
     if not isinstance(full_body, bool):
         try:
             full_body = bool(full_body)
-        except ValueError:
-            raise ValidationError("full_body must be a boolean.")
+        except ValueError as exc:
+            raise ValidationError("full_body must be a boolean.") from exc
     try:
         return get_emails(gmail_query, count, page, full_body)
     except ValidationError as e:
@@ -73,5 +81,7 @@ def get_emails_tool(
 
 
 if __name__ == "__main__":
+    if not os.getenv("CREDENTIALS_FILE"):
+        raise ValueError("CREDENTIALS_FILE environment variable is not set for the server to run.")
     # Run the FastMCP server
     mcp.run()
