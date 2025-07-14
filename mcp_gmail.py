@@ -5,9 +5,6 @@ from pydantic import Field, ValidationError
 
 from gmail import get_emails
 
-if not os.getenv("CREDENTIALS_FILE"):
-    raise ValueError("CREDENTIALS_FILE environment variable is not set.")
-
 # Initialize FastMCP server
 mcp = FastMCP(
     name="gmail_mails",
@@ -73,5 +70,7 @@ def get_emails_tool(
 
 
 if __name__ == "__main__":
+    if not os.getenv("CREDENTIALS_FILE"):
+        raise ValueError("CREDENTIALS_FILE environment variable is not set for the server to run.")
     # Run the FastMCP server
     mcp.run()
