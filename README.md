@@ -51,8 +51,8 @@ To allow the application to read your emails, you need to authorize it with the 
 
 ```bash
 # Clone the repository
-git clone <repository_url>
-cd <repository_directory>
+git clone https://github.com/sshnaidm/mcp-gmail
+cd mcp-gmail
 
 # Create and activate a virtual environment (recommended)
 python3 -m venv venv
