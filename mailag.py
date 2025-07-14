@@ -1,7 +1,7 @@
 """This module provides a Gradio chat interface for an AI email assistant."""
-#!/usr/bin/env python3
 
 import datetime
+
 import gradio as gr
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
@@ -9,8 +9,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 
 from gmail import get_emails
-from models import ollama, gemini
-
+from models import gemini, ollama
 
 # pylint: disable=unused-import
 # flake8: noqa: F401

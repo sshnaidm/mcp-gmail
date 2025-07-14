@@ -1,4 +1,5 @@
 """This module provides a FastMCP tool for fetching emails from Gmail."""
+
 import os
 
 from fastmcp import FastMCP

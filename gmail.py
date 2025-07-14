@@ -1,9 +1,10 @@
 """This module provides a function to fetch emails from a Gmail account."""
+
+import ast
 import base64
 import json
-import os
 import logging
-import ast
+import os
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
