@@ -1,23 +1,35 @@
+#!/usr/bin/env python3
 """This module provides a Gradio chat interface for an AI email assistant."""
-
 import datetime
+
+try:
+    from logging_config import setup_logging
+
+    logger = setup_logging(__name__)
+except ImportError:
+    import logging
+
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
 import gradio as gr
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
-from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import PromptTemplate
 
-from gmail import get_emails
+import mcp_gmail
+
 # pylint: disable=unused-import
 from models import gemini, ollama
 
+logger.info("mail_agent module initialized")
+
+
 # flake8: noqa: F401
-llm = ollama  # or gemini, or any other model you want to use
+llm = gemini  # ollama  # or gemini, or any other model you want to use
 # llm = gemini  # Uncomment to use Gemini model
 
 print("LLM initialized:", llm)
-
 
 AI_SYSTEM_PROMPT = """
 You are helpful AI assistant that helps with managing mails, docs, calendar, and other tasks.
@@ -36,75 +48,15 @@ You have access to the following tools:
     Output: The current date in YYYY-MM-DD format.
 """
 
-
-def gmail_search_tool(query: str, count: int = 50, page: int = 1, full_body: bool = False) -> str:
-    """
-    Search for emails in Gmail based on the provided query.
-
-    Args:
-        query (str): The search query to filter emails.
-        count (int): The number of emails to return.
-        page (int): The page number of the results.
-        full_body (bool): Whether to return the full body of the email.
-
-    Returns:
-        str: A formatted string containing the search results.
-    """
-    if not isinstance(count, int):
-        try:
-            count = int(count)
-        except ValueError as exc:
-            raise TypeError("count must be an integer.") from exc
-    if not isinstance(page, int):
-        try:
-            page = int(page)
-        except ValueError as exc:
-            raise TypeError("page must be an integer.") from exc
-    if not isinstance(full_body, bool):
-        try:
-            full_body = bool(full_body)
-        except ValueError as exc:
-            raise TypeError("full_body must be a boolean.") from exc
-
-    # Call the get_emails function with the provided query
-    return get_emails(gmail_query=query, count=count, page=page, full_body=full_body)
-
-
-def list_tools() -> str:
-    """
-    List the available tools.
-
-    Returns:
-        str: A formatted string containing the list of available tools.
-    """
-    return "\n".join([f"{tool.name}: {tool.description}" for tool in tools])
-
-
+# Access the underlying functions from the FunctionTool objects
+# The @mcp.tool decorator wraps functions in FunctionTool objects
+# We need to access the actual function using the .fn attribute
 tools = [
-    Tool(
-        name="list_tools",
-        func=lambda x: list_tools(),
-        description="List the available tools.",
-    ),
-    Tool(
-        name="gmail_search",
-        func=gmail_search_tool,
-        description=(
-            "Search for emails in Gmail."
-            "Input should be a JSON object with a 'query' field containing the search query."
-            "Output will be a list of emails matching the query with snippets or full text."
-        ),
-    ),
-    Tool(
-        name="get_todays_date",
-        func=lambda x: datetime.datetime.now().strftime("%Y-%m-%d"),
-        description=(
-            "Get today's date in YYYY-MM-DD format."
-            "This tool does not require any input and returns the current date."
-        ),
-    ),
+    Tool(name="list_tools", func=mcp_gmail.list_tools.fn, description=mcp_gmail.list_tools.description),
+    Tool(name="get_emails_tool", func=mcp_gmail.get_emails_tool.fn, description=mcp_gmail.get_emails_tool.description),
+    Tool(name="send_email_tool", func=mcp_gmail.send_email_tool.fn, description=mcp_gmail.send_email_tool.description),
+    Tool(name="get_today_date", func=mcp_gmail.get_today_date.fn, description=mcp_gmail.get_today_date.description),
 ]
-
 
 # Use ReAct agent instead of OpenAI functions agent
 # prompt = hub.pull("hwchase17/react")
@@ -117,6 +69,9 @@ You have access to the following tools:
 {tools}
 
 Tool names: {tool_names}
+
+Previous conversation history:
+{chat_history}
 
 When answering questions, follow this format EXACTLY:
 
@@ -132,6 +87,8 @@ Final Answer: the final answer to the original input question
 IMPORTANT: When you have enough information to answer the question, you MUST end with:
 Thought: I now know the final answer
 Final Answer: [your complete answer here]
+
+Remember the context from our previous conversation when answering.
 
 Question: {input}
 {agent_scratchpad}
@@ -158,21 +115,35 @@ agent_executor = AgentExecutor(
 
 def chat(message, history):
     """
-    Alternative implementation using invoke instead of stream
+    Chat function for the agent executor.
+    Args:
+        message (str): The message to send to the agent.
+        history (list): The history of the conversation.
+    Returns:
+        str: The response from the agent.
     """
     try:
         start = datetime.datetime.now()
         print(f"DEBUG: Starting calculation at {start}")
-        # Convert gradio history to langchain format
-        chat_history = []
-        for h in history:
-            if h["role"] == "user":
-                chat_history.append(HumanMessage(content=h["content"]))
-            elif h["role"] == "assistant":
-                chat_history.append(AIMessage(content=h["content"]))
+        print(f"DEBUG: Received history with {len(history) if history else 0} messages")
+
+        # Convert gradio history to a formatted string for the prompt
+        chat_history_str = ""
+        if history:
+            for h in history:
+                if h["role"] == "user":
+                    chat_history_str += f"Human: {h['content']}\n"
+                elif h["role"] == "assistant":
+                    chat_history_str += f"Assistant: {h['content']}\n"
+            chat_history_str = chat_history_str.strip()
+            print(f"DEBUG: Formatted chat history:\n{chat_history_str[:200]}...")  # Show first 200 chars
+        else:
+            chat_history_str = "No previous conversation."
+            print("DEBUG: No previous conversation history")
 
         # Prepare input for the agent
-        agent_input = {"input": message, "chat_history": chat_history}
+        agent_input = {"input": message, "chat_history": chat_history_str}
+        print(f"DEBUG: Agent input prepared with message: {message[:100]}...")
 
         # Get the response directly
         response = agent_executor.invoke(agent_input)
@@ -182,6 +153,7 @@ def chat(message, history):
             final_answer = response["output"]
         else:
             final_answer = str(response)
+        print(f"DEBUG: Response: {response}")
         end = datetime.datetime.now()
         total = round((end - start).total_seconds(), 2)
         yield final_answer + f"\n\nTotal time: {total} seconds"
