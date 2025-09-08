@@ -22,16 +22,15 @@ import additional_mcp
 import mcp_gmail
 
 # pylint: disable=unused-import
-from models import gemini, ollama
+from models import init_llm, gemini, ollama, openai
 
 logger.info("assistant module initialized")
 
 
 # flake8: noqa: F401
-llm = gemini  # ollama  # or gemini, or any other model you want to use
-# llm = gemini  # Uncomment to use Gemini model
+llm = init_llm()  # gemini  # ollama or gemini, or any other model you want to use
 
-print("LLM initialized:", llm)
+print("LLM initialized in Agent Executor:", llm)
 
 AI_SYSTEM_PROMPT = """
 You are helpful AI assistant that helps with managing mails, docs, calendar, and other tasks.
