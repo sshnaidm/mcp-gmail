@@ -37,6 +37,8 @@ SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     "https://www.googleapis.com/auth/gmail.compose",  # For creating drafts
     "https://www.googleapis.com/auth/gmail.send",  # For sending emails
+    "https://www.googleapis.com/auth/calendar.readonly",  # For reading calendar events
+    "https://www.googleapis.com/auth/calendar.events",  # For creating/modifying calendar events
 ]
 CREDENTIALS_FILE = os.environ.get("CREDENTIALS_FILE", os.path.expanduser("~/.config/credentials.json"))
 

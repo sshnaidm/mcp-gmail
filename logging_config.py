@@ -8,13 +8,13 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 NUMERIC_LEVEL = getattr(logging, LOG_LEVEL, logging.INFO)
 
 # Single log file for the entire project
-LOG_FILE = "gmail_agent.log"
+LOG_FILE = "assistant_agent.log"
 
 # Standard format for all logs
 LOG_FORMAT = "%(asctime)s - %(filename)s:%(lineno)d - %(levelname)s - %(message)s"
 
 # Our application modules
-APP_MODULES = ("gmail", "mcp_gmail", "mail_agent", "logging_config", "__main__")
+APP_MODULES = ("gmail", "mcp_gmail", "mcp_calendar", "assistant", "logging_config", "__main__")
 
 # Third-party loggers to suppress (only show warnings)
 NOISY_LOGGERS = [

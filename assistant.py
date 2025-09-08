@@ -17,12 +17,13 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain.tools import Tool
 from langchain_core.prompts import PromptTemplate
 
+import mcp_calendar
 import mcp_gmail
 
 # pylint: disable=unused-import
 from models import gemini, ollama
 
-logger.info("mail_agent module initialized")
+logger.info("assistant module initialized")
 
 
 # flake8: noqa: F401
@@ -34,28 +35,115 @@ print("LLM initialized:", llm)
 AI_SYSTEM_PROMPT = """
 You are helpful AI assistant that helps with managing mails, docs, calendar, and other tasks.
 You are able to use tools to answer questions and perform actions.
+When you are asked to perform an action, you should use the appropriate tool to perform the action.
+# Custom rules:
+When you are asked to plan a day, you should create events (kind of tasks) for the owner in their calendar for today
+or requested date. Estimate the duration of the tasks based on the description and context, create events with the
+appropriate duration. For example is the task is about "Create a new report", the duration might be 1 hour. In this
+case create an event with the duration of 1 hour and appropriate description in reasonable working hours.
+If the task is about "Buy groceries", the duration might be 1 hour. In this case create an event with the duration
+of 1 hour and appropriate description in reasonable non-working hours.
+If user asks just to show the plan for today or requested date, you should NOT create events, you should only show the
+events that are already created in the calendar and other actions from context.
+
+# Tools:
 You have access to the following tools:
-1. **list_tools**: List the available tools.
+1. **get_emails_tool**: Search for emails in Gmail.
     Input: {}
     Output: The list of available tools.
-2. **gmail_search**: Search for emails in Gmail.
+2. **send_email_tool**: Send an email.
     Input: {"query": "in:inbox subject:meeting"}
     Input: {"query": "from:user in:inbox", count: 50, page: 1, full_body: True}
     Input: {"query": "to:me", count: 50}
     Output: The list of emails matching the query with snippets or full text.
-3. **get_todays_date**: Get today's date in YYYY-MM-DD format.
+3. **get_today_date**: Get today's date in YYYY-MM-DD format.
     Input: {}
     Output: The current date in YYYY-MM-DD format.
+4. **get_calendar_events**: Get calendar events.
+    Input: {"query": "in:inbox subject:meeting"}
+    Output: The list of calendar events matching the query.
+5. **create_calendar_event**: Create a calendar event in the calendar.
+    Input: {
+        "event": "event_name", 
+        "description": "event_description", 
+        "start": "2025-09-09T10:00:00", 
+        "end": "2025-09-09T11:00:00",
+        "calendar_id": "calendar_id"
+    }
+    Output: The created calendar event.
+6. **update_calendar_event**: Update a calendar event in the calendar.
+    Input: {
+        "event": "event_name", 
+        "description": "event_description", 
+        "start": "2025-09-09T10:00:00", 
+        "end": "2025-09-09T11:00:00",
+        "calendar_id": "calendar_id"
+    }
+    Output: The updated calendar event.
+7. **delete_calendar_event**: Delete a calendar event.
+    Input: {"event": "event_name"}
+    Output: The deleted calendar event.
+8. **find_meeting_slots**: Find meeting slots for the attendees.
+    Input: {
+        "attendees": ["attendee1@e.com", "attendee2@e.com"], 
+        "duration": 30, 
+        "date_start": "2025-09-09", 
+        "date_end": "2025-09-11",
+        "earliest_hour": 7,
+        "latest_hour": 20,
+        "max_suggestions": 5
+    }
+    Output: The list of meeting slots.
+9. **get_free_busy**: Get free/busy information for the calendars.
+    Input: {
+        "time_min": "2025-09-09T10:00:00", 
+        "time_max": "2025-09-09T20:00:00",
+        "calendars": ["calendar_id1", "calendar_id2"], 
+        "timezone": "UTC"
+        }
+    Output: The free/busy information.
+
 """
 
 # Access the underlying functions from the FunctionTool objects
 # The @mcp.tool decorator wraps functions in FunctionTool objects
 # We need to access the actual function using the .fn attribute
 tools = [
-    Tool(name="list_tools", func=mcp_gmail.list_tools.fn, description=mcp_gmail.list_tools.description),
+    Tool(name="list_gmail_tools", func=mcp_gmail.list_gmail_tools.fn, description=mcp_gmail.list_gmail_tools.description),
+    Tool(name="list_calendar_tools", func=mcp_calendar.list_calendar_tools.fn, description=mcp_calendar.list_calendar_tools.description),
     Tool(name="get_emails_tool", func=mcp_gmail.get_emails_tool.fn, description=mcp_gmail.get_emails_tool.description),
     Tool(name="send_email_tool", func=mcp_gmail.send_email_tool.fn, description=mcp_gmail.send_email_tool.description),
     Tool(name="get_today_date", func=mcp_gmail.get_today_date.fn, description=mcp_gmail.get_today_date.description),
+    Tool(
+        name="get_calendar_events",
+        func=mcp_calendar.get_events_tool.fn,
+        description=mcp_calendar.get_events_tool.description,
+    ),
+    Tool(
+        name="create_calendar_event",
+        func=mcp_calendar.create_event_tool.fn,
+        description=mcp_calendar.create_event_tool.description,
+    ),
+    Tool(
+        name="update_calendar_event",
+        func=mcp_calendar.update_event_tool.fn,
+        description=mcp_calendar.update_event_tool.description,
+    ),
+    Tool(
+        name="delete_calendar_event",
+        func=mcp_calendar.delete_event_tool.fn,
+        description=mcp_calendar.delete_event_tool.description,
+    ),
+    Tool(
+        name="find_meeting_slots",
+        func=mcp_calendar.find_meeting_slots_tool.fn,
+        description=mcp_calendar.find_meeting_slots_tool.description,
+    ),
+    Tool(
+        name="get_free_busy",
+        func=mcp_calendar.get_free_busy_tool.fn,
+        description=mcp_calendar.get_free_busy_tool.description,
+    ),
 ]
 
 # Use ReAct agent instead of OpenAI functions agent
@@ -63,7 +151,7 @@ tools = [
 
 prompt = PromptTemplate.from_template(
     """
-You are a helpful email assistant that can search Gmail and provide summaries.
+You are a helpful email assistant that can search Gmail, manage calendar events, and provide summaries.
 
 You have access to the following tools:
 {tools}

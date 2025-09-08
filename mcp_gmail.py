@@ -37,7 +37,7 @@ class MCPConsoleFilter(logging.Filter):
 
     def filter(self, record):
         # Only show logs from our modules, not third-party libraries
-        return record.name.startswith(("mcp_gmail", "gmail", "mail_agent", "__main__")) or record.name == "root"
+        return record.name.startswith(("mcp_gmail", "gmail", "assistant", "__main__")) or record.name == "root"
 
 
 console_handler = logging.StreamHandler()
@@ -110,7 +110,7 @@ def parse_input(input_str: str) -> dict:
     name="List Available Tools",
     description="List all available tools.",
 )
-def list_tools() -> str:
+def list_gmail_tools() -> str:
     """List all available tools."""
     logger.info("Listing available tools")
     try:

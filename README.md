@@ -82,10 +82,10 @@ export CREDENTIALS_FILE="/path/to/your/credentials.json"
 
 The main application is the Gradio-based chat agent.
 
-1. **Select your LLM**: Open `mail_agent.py` and `models.py`. In `mail_agent.py`, you can choose which LLM to use:
+1. **Select your LLM**: Open `assistant.py` and `models.py`. In `assistant.py`, you can choose which LLM to use:
 
     ```python
-    # in mail_agent.py
+    # in assistant.py
     from models import gemini, ollama
 
     llm = ollama # or llm = gemini
@@ -96,7 +96,7 @@ The main application is the Gradio-based chat agent.
 2. **Run the application**:
 
     ```bash
-    python mail_agent.py
+    python assistant.py
     ```
 
 3. **First-time Authentication**: The first time you run the script, a browser window will open asking you to log in to your Google account and grant the application permission to read your emails. After you approve, a `token.json` file will be created in the project directory. This file stores your authorization token so you don't have to log in every time.
@@ -118,7 +118,7 @@ python mcp_gmail.py
 
 ## Project Structure
 
-- `mail_agent.py`: The main entry point for the Gradio chat application. It sets up the LangChain agent and the UI.
+- `assistant.py`: The main entry point for the Gradio chat application. It sets up the LangChain agent and the UI.
 - `gmail.py`: Contains the core logic for authenticating with the Google API and fetching emails.
 - `models.py`: Defines the LangChain LLM model configurations (Gemini, Ollama).
 - `mcp_gmail.py`: An alternative entry point that runs a `FastMCP` server to expose the email search function as a tool.
