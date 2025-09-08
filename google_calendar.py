@@ -773,10 +773,12 @@ def find_meeting_slots(
     duration_minutes: int = 30,
     date_start: Optional[str] = None,  # ISO format: "2024-12-20"
     date_end: Optional[str] = None,  # ISO format: "2024-12-27"
+    preferred_time_start: Optional[str] = None,
+    preferred_time_end: Optional[str] = None,
     earliest_hour: int = 7,
     latest_hour: int = 20,
     timezone: str = "UTC",
-    max_suggestions: int = 5,
+    max_suggestions: int = 10,
     weekdays_only: bool = True,  # Skip weekends
     allowed_weekdays: Optional[List[int]] = None,  # [0=Mon, 1=Tue, ..., 6=Sun]
     use_attendee_timezones: bool = True,  # Use each attendee's local timezone for working hours
@@ -794,6 +796,8 @@ def find_meeting_slots(
         duration_minutes: Meeting duration in minutes.
         date_start: Start date for search in ISO format (default: today).
         date_end: End date for search in ISO format (default: 7 days from start).
+        preferred_time_start: Preferred start time in ISO format (HH:MM). Default: None
+        preferred_time_end: Preferred end time in ISO format (HH:MM). Default: None
         earliest_hour: Earliest hour for meeting in each person's local time (default 7 AM).
         latest_hour: Latest hour for meeting end in each person's local time (default 8 PM).
         timezone: Default timezone if detection is disabled.
@@ -863,8 +867,11 @@ def find_meeting_slots(
             "timeZone": timezone,
             "items": [{"id": cal} for cal in all_calendars],
         }
+        logger.debug(f"Free/busy body: {body}")
 
         freebusy_result = service.freebusy().query(body=body).execute()
+
+        logger.debug(f"Free/busy result: {freebusy_result}")
 
         # Parse busy times for each person
         all_busy_times = {}
@@ -876,6 +883,8 @@ def find_meeting_slots(
                 end = datetime.fromisoformat(busy["end"].replace("Z", ""))
                 busy_times.append((start, end))
             all_busy_times[calendar_id] = busy_times
+
+        logger.debug(f"All busy times: {all_busy_times}")
 
         # Find free slots
         free_slots = []
@@ -910,20 +919,81 @@ def find_meeting_slots(
                 current_date += timedelta(days=1)
                 continue
 
-            # Get working hours overlap for this day
-            if use_attendee_timezones:
-                overlap = find_working_hours_overlap(attendee_timezones, current_datetime, earliest_hour, latest_hour)
+            # Determine daily search window
+            if preferred_time_start or preferred_time_end:
+                try:
+                    # Use preferred window in PRIMARY calendar's timezone
+                    primary_tz = ZoneInfo(attendee_timezones.get("primary", "UTC"))
+                    if preferred_time_start:
+                        start_h, start_m = [int(x) for x in str(preferred_time_start).split(":")[:2]]
+                    else:
+                        start_h, start_m = int(earliest_hour), 0
+                    if preferred_time_end:
+                        end_h, end_m = [int(x) for x in str(preferred_time_end).split(":")[:2]]
+                    else:
+                        end_h, end_m = int(latest_hour), 0
 
-                if not overlap:
-                    logger.info(f"No working hours overlap on {current_date} for attendees in different timezones")
-                    current_date += timedelta(days=1)
-                    continue
+                    local_start = datetime.combine(current_date, time(start_h, start_m)).replace(tzinfo=primary_tz)
+                    local_end = datetime.combine(current_date, time(end_h, end_m)).replace(tzinfo=primary_tz)
 
-                day_start, day_end = overlap
+                    day_start = local_start.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+                    day_end = local_end.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+
+                    logger.debug(
+                        f"Preferred window on {current_date} (primary {primary_tz}): "
+                        f"{local_start.time()}-{local_end.time()} -> UTC {day_start.time()}-{day_end.time()}"
+                    )
+
+                    if day_start >= day_end:
+                        logger.debug(
+                            f"Preferred window invalid or zero-length for {current_date}: "
+                            f"{preferred_time_start}-{preferred_time_end}"
+                        )
+                        current_date += timedelta(days=1)
+                        continue
+                except Exception as e:
+                    logger.warning(f"Failed to apply preferred_time window, falling back to working hours: {e}")
+                    # Fallback to overlap/fixed window
+                    if use_attendee_timezones:
+                        overlap = find_working_hours_overlap(
+                            attendee_timezones, current_datetime, earliest_hour, latest_hour
+                        )
+                        if not overlap:
+                            current_date += timedelta(days=1)
+                            continue
+                        day_start, day_end = overlap
+                        logger.debug(
+                            f"Overlap window (UTC) on {current_date}: {day_start.time()}-{day_end.time()}"
+                        )
+                    else:
+                        day_start = datetime.combine(current_date, time(earliest_hour, 0))
+                        day_end = datetime.combine(current_date, time(latest_hour, 0))
+                        logger.debug(
+                            f"Fixed window (UTC) on {current_date}: {day_start.time()}-{day_end.time()}"
+                        )
             else:
-                # Use fixed hours if not using timezone detection
-                day_start = datetime.combine(current_date, time(earliest_hour, 0))
-                day_end = datetime.combine(current_date, time(latest_hour, 0))
+                # No preferred window: use working hours logic
+                if use_attendee_timezones:
+                    overlap = find_working_hours_overlap(
+                        attendee_timezones, current_datetime, earliest_hour, latest_hour
+                    )
+
+                    if not overlap:
+                        logger.info(f"No working hours overlap on {current_date} for attendees in different timezones")
+                        current_date += timedelta(days=1)
+                        continue
+
+                    day_start, day_end = overlap
+                    logger.debug(
+                        f"Overlap window (UTC) on {current_date}: {day_start.time()}-{day_end.time()}"
+                    )
+                else:
+                    # Use fixed hours if not using timezone detection
+                    day_start = datetime.combine(current_date, time(earliest_hour, 0))
+                    day_end = datetime.combine(current_date, time(latest_hour, 0))
+                    logger.debug(
+                        f"Fixed window (UTC) on {current_date}: {day_start.time()}-{day_end.time()}"
+                    )
 
             # Start checking slots from the beginning of working hours
             current = day_start
@@ -949,6 +1019,14 @@ def find_meeting_slots(
                     for busy_start, busy_end in busy_times:
                         # Check if our slot overlaps with any busy time
                         if not (slot_end <= busy_start or current >= busy_end):
+                            logger.debug(
+                                "Rejecting slot %s-%s due to busy block %s-%s in %s",
+                                current.time(),
+                                slot_end.time(),
+                                busy_start.time(),
+                                busy_end.time(),
+                                calendar_id,
+                            )
                             is_free = False
                             break
                     if not is_free:
@@ -963,6 +1041,8 @@ def find_meeting_slots(
             # Move to next day
             current_date += timedelta(days=1)
 
+        logger.debug(f"Free slots: {free_slots}")
+
         # Format results
         if not free_slots:
             days_searched = (end_date - start_date).days
@@ -971,20 +1051,45 @@ def find_meeting_slots(
         result = f"🗓️ Available {duration_minutes}-minute meeting slots:\n"
         result += "=" * 50 + "\n\n"
 
+        # Display all slot times in the primary calendar's timezone for clarity
+        primary_tz_str = attendee_timezones.get("primary", "UTC")
+        try:
+            primary_tz = ZoneInfo(primary_tz_str)
+        except Exception:
+            primary_tz = ZoneInfo("UTC")
+        result += f"Times shown in primary timezone: {primary_tz_str}\n\n"
+
         for i, (start, end) in enumerate(free_slots, 1):
+            # Convert from UTC-naive to primary timezone for display
+            start_local = start.replace(tzinfo=ZoneInfo("UTC")).astimezone(primary_tz)
+            end_local = end.replace(tzinfo=ZoneInfo("UTC")).astimezone(primary_tz)
+
             result += f"Option {i}:\n"
-            result += f"  📅 {start.strftime('%A, %B %d, %Y')}\n"
-            result += f"  ⏰ {start.strftime('%I:%M %p')} - {end.strftime('%I:%M %p')}\n"
+            result += f"  📅 {start_local.strftime('%A, %B %d, %Y')}\n"
+            result += f"  ⏰ {start_local.strftime('%I:%M %p')} - {end_local.strftime('%I:%M %p')}\n"
             result += f"  Duration: {duration_minutes} minutes\n"
             result += "\n"
 
         result += f"Attendees checked: {', '.join(attendees)}\n"
-        if use_attendee_timezones:
-            result += "Timezones detected:\n"
-            for cal_id, tz in attendee_timezones.items():
-                result += f"  • {cal_id}: {tz} (local {earliest_hour:02d}:00-{latest_hour:02d}:00)\n"
+        if preferred_time_start or preferred_time_end:
+            # Show preferred window in primary tz for clarity
+            primary_tz = attendee_timezones.get("primary", "UTC")
+            start_str = (str(preferred_time_start)[:5]) if preferred_time_start else f"{int(earliest_hour):02d}:00"
+            end_str = (str(preferred_time_end)[:5]) if preferred_time_end else f"{int(latest_hour):02d}:00"
+            result += f"Preferred window (primary {primary_tz}): {start_str}-{end_str}\n"
+            if use_attendee_timezones:
+                result += "Timezones detected:\n"
+                for cal_id, tz in attendee_timezones.items():
+                    result += f"  • {cal_id}: {tz}\n"
         else:
-            result += f"Working hours: {earliest_hour:02d}:00 - {latest_hour:02d}:00 ({timezone})\n"
+            if use_attendee_timezones:
+                result += "Timezones detected:\n"
+                for cal_id, tz in attendee_timezones.items():
+                    result += f"  • {cal_id}: {tz} (local {earliest_hour:02d}:00-{latest_hour:02d}:00)\n"
+            else:
+                result += f"Working hours: {earliest_hour:02d}:00 - {latest_hour:02d}:00 ({timezone})\n"
+
+        logger.debug(f"Result: {result}")
 
         return result
 

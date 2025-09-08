@@ -18,6 +18,7 @@ from langchain.tools import Tool
 from langchain_core.prompts import PromptTemplate
 
 import mcp_calendar
+import additional_mcp
 import mcp_gmail
 
 # pylint: disable=unused-import
@@ -45,6 +46,28 @@ If the task is about "Buy groceries", the duration might be 1 hour. In this case
 of 1 hour and appropriate description in reasonable non-working hours.
 If user asks just to show the plan for today or requested date, you should NOT create events, you should only show the
 events that are already created in the calendar and other actions from context.
+
+# IMPORTANT: When you cannot find what the user requested, you must use the "Ask User" tool to:
+1. Explain what you found (or didn't find)
+2. Ask for clarification or next steps
+
+Never end your response without taking an action.
+
+Example when no slots are found:
+Thought: I found no available slots in the requested time range. I should inform the user and ask for alternatives.
+Action: Ask User
+Action Input: "I couldn't find any available 20-minute slots between 10:00-17:00 tomorrow for both you and
+someone@example.com. The earliest available slots are between 07:00-09:20. Would you like me to:
+1) Search for slots at different times, 2) Look on a different day, or 3) Book one of the morning slots?"
+Observation: [User will provide their preference]
+
+Example when you need more information:
+Thought: The user wants to schedule a meeting but didn't specify the duration.
+Action: Ask User
+Action Input: "How long should the meeting be? Common durations are 30 minutes, 1 hour, or 90 minutes."
+Observation: [User will provide duration]
+
+Always use the "Ask User" tool when you need to communicate findings and get direction from the user.
 
 # Tools:
 You have access to the following tools:
@@ -86,12 +109,14 @@ You have access to the following tools:
 8. **find_meeting_slots**: Find meeting slots for the attendees.
     Input: {
         "attendees": ["attendee1@e.com", "attendee2@e.com"], 
-        "duration": 30, 
-        "date_start": "2025-09-09", 
+        "duration_minutes": 30,
+        "date_start": "2025-09-09",
         "date_end": "2025-09-11",
+        "preferred_time_start": "09:00",
+        "preferred_time_end": "17:00",
         "earliest_hour": 7,
         "latest_hour": 20,
-        "max_suggestions": 5
+        "max_suggestions": 10
     }
     Output: The list of meeting slots.
 9. **get_free_busy**: Get free/busy information for the calendars.
@@ -102,6 +127,9 @@ You have access to the following tools:
         "timezone": "UTC"
         }
     Output: The free/busy information.
+10. **ask_user**: Ask the user a question when you need clarification or additional information.
+    Input: Your question as a string.
+    Output: The question for the user.
 
 """
 
@@ -109,8 +137,14 @@ You have access to the following tools:
 # The @mcp.tool decorator wraps functions in FunctionTool objects
 # We need to access the actual function using the .fn attribute
 tools = [
-    Tool(name="list_gmail_tools", func=mcp_gmail.list_gmail_tools.fn, description=mcp_gmail.list_gmail_tools.description),
-    Tool(name="list_calendar_tools", func=mcp_calendar.list_calendar_tools.fn, description=mcp_calendar.list_calendar_tools.description),
+    Tool(
+        name="list_gmail_tools", func=mcp_gmail.list_gmail_tools.fn, description=mcp_gmail.list_gmail_tools.description
+    ),
+    Tool(
+        name="list_calendar_tools",
+        func=mcp_calendar.list_calendar_tools.fn,
+        description=mcp_calendar.list_calendar_tools.description,
+    ),
     Tool(name="get_emails_tool", func=mcp_gmail.get_emails_tool.fn, description=mcp_gmail.get_emails_tool.description),
     Tool(name="send_email_tool", func=mcp_gmail.send_email_tool.fn, description=mcp_gmail.send_email_tool.description),
     Tool(name="get_today_date", func=mcp_gmail.get_today_date.fn, description=mcp_gmail.get_today_date.description),
@@ -144,6 +178,12 @@ tools = [
         func=mcp_calendar.get_free_busy_tool.fn,
         description=mcp_calendar.get_free_busy_tool.description,
     ),
+    Tool(
+        name="ask_user",
+        func=additional_mcp.ask_user_tool.fn,
+        description=additional_mcp.ask_user_tool.description,
+        return_direct=True,
+    ),
 ]
 
 # Use ReAct agent instead of OpenAI functions agent
@@ -172,9 +212,30 @@ Observation: the result of the action
 Thought: I now know the final answer
 Final Answer: the final answer to the original input question
 
-IMPORTANT: When you have enough information to answer the question, you MUST end with:
-Thought: I now know the final answer
-Final Answer: [your complete answer here]
+IMPORTANT RULES:
+1. Always follow the Thought/Action/Action Input/Observation format until you have a complete answer.
+
+2. When you have a complete answer, end with:
+   Thought: I now know the final answer
+   Final Answer: [your complete response]
+
+3. CONTEXT AWARENESS: Always consider the conversation history to understand:
+   - What task is in progress
+   - What the user is trying to accomplish
+   - Whether the current input is a continuation or refinement of a previous request
+
+4. BE PROACTIVE: When the user provides new information or constraints:
+   - Take appropriate actions to help complete their goal
+   - Don't just explain what you found - continue working toward the solution
+   - Use reasonable defaults when information is missing (and mention what defaults you used)
+
+5. ONLY provide a Final Answer when:
+   - The task is complete
+   - You need critical information that prevents any progress
+   - The user explicitly asks for information without requesting an action
+
+6. If you need clarification from the user, use the ask_user tool.
+   Do not produce a Final Answer in that case; take Action: ask_user with your question.
 
 Remember the context from our previous conversation when answering.
 
@@ -193,7 +254,7 @@ agent_executor = AgentExecutor(
     tools=tools,
     verbose=True,
     handle_parsing_errors=True,
-    max_iterations=4,  # Prevent infinite loops
+    max_iterations=6,  # Allow a couple more steps when clarifying
     max_execution_time=180,  # Limit execution time to 180 seconds
     # early_stopping_method="generate",  # Changed to "generate" for better final answer handling
     early_stopping_method="force",

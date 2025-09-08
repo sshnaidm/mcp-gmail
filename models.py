@@ -11,4 +11,5 @@ gemini = ChatGoogleGenerativeAI(
 
 
 # ollama based model
-ollama = ChatOllama(model="qwen3:14b", temperature=0.0, top_p=0.0, num_ctx=40960)
+ollama = ChatOllama(model="qwen3:8b", temperature=0.0, top_p=0.0, num_ctx=40000)
+#ollama = ChatOllama(model="qwen2.5:7b", temperature=0.0, top_p=0.0, num_ctx=40000)

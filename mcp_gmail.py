@@ -308,14 +308,22 @@ def send_email_tool(
 
 @mcp.tool(
     name="Get Today's Date",
-    description="Get today's date in YYYY-MM-DD format. Doesn't require any input parameters.",
+    description=(
+        "Get today's date with weekday as JSON. Returns: {\"date\": \"YYYY-MM-DD\", \"weekday\": \"Monday\"}. "
+        "Doesn't require any input parameters."
+    ),
 )
 def get_today_date(test) -> str:
-    """Get today's date in YYYY-MM-DD format. Doesn't require any input parameters."""
+    """Return today's date and weekday as a JSON string."""
     logger.debug("get_today_date called")
     logger.debug(f"get_today_date Test parameter: {test}")
-    result = datetime.datetime.now().strftime("%Y-%m-%d")
-    logger.debug(f"Returning date: {result}")
+    now = datetime.datetime.now()
+    payload = {
+        "date": now.strftime("%Y-%m-%d"),
+        "weekday": now.strftime("%A"),
+    }
+    result = json.dumps(payload)
+    logger.debug(f"Returning date payload: {result}")
     return result
 
 

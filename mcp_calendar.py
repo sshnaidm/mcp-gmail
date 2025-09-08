@@ -430,9 +430,15 @@ def delete_event_tool(
     - `duration_minutes` (int): Meeting duration in minutes. Default: 30
     - `date_start` (str): Start date in ISO format (YYYY-MM-DD). Default: today
     - `date_end` (str): End date in ISO format. Default: 7 days from start
+    - `preferred_time_start` (str): Preferred start time in ISO format (HH:MM). Default: None
+    - `preferred_time_end` (str): Preferred end time in ISO format (HH:MM). Default: None
+    Note: If both preferred_time_start and preferred_time_end are provided, they OVERRIDE `earliest_hour`/`latest_hour`.
+    Note: The preferred times are interpreted in the PRIMARY calendar's timezone (the organizer/user).
     - `earliest_hour` (int): Earliest hour for meetings (local time). Default: 7
     - `latest_hour` (int): Latest hour for meetings (local time). Default: 20
-    - `max_suggestions` (int): Maximum number of slots to suggest. Default: 5
+    - `max_suggestions` (int): Maximum number of slots to suggest. Default: 10
+
+    If you don't find any slots or they are not suitable, increase `max_suggestions` to find more slots.
 
     Examples:
     {"attendees": ["colleague@example.com"], "duration_minutes": 60}
@@ -441,8 +447,21 @@ def delete_event_tool(
         "duration_minutes": 30,
         "date_start": "2024-01-15",
         "date_end": "2024-01-20",
+        "preferred_time_start": "09:00",
+        "preferred_time_end": "17:00",
         "earliest_hour": 7,
-        "latest_hour": 18
+        "latest_hour": 20,
+        "max_suggestions": 20
+    }
+
+    Another example (preferred window only, in primary timezone):
+    {
+        "attendees": ["colleague@example.com"],
+        "date_start": "2025-09-09",
+        "date_end": "2025-09-09",
+        "preferred_time_start": "11:00",
+        "preferred_time_end": "17:00",
+        "duration_minutes": 30
     }
 
     Returns available time slots with timezone information.
@@ -454,9 +473,11 @@ def find_meeting_slots_tool(
     duration_minutes: Any = 30,
     date_start: Any = None,
     date_end: Any = None,
+    preferred_time_start: Any = None,
+    preferred_time_end: Any = None,
     earliest_hour: Any = 7,
     latest_hour: Any = 20,
-    max_suggestions: Any = 5,
+    max_suggestions: Any = 10,
 ) -> str:
     """Find available meeting slots for multiple attendees."""
 
@@ -472,6 +493,8 @@ def find_meeting_slots_tool(
         duration_minutes = params.get("duration_minutes", duration_minutes)
         date_start = params.get("date_start", date_start)
         date_end = params.get("date_end", date_end)
+        preferred_time_start = params.get("preferred_time_start", preferred_time_start)
+        preferred_time_end = params.get("preferred_time_end", preferred_time_end)
         earliest_hour = params.get("earliest_hour", earliest_hour)
         latest_hour = params.get("latest_hour", latest_hour)
         max_suggestions = params.get("max_suggestions", max_suggestions)
@@ -493,6 +516,7 @@ def find_meeting_slots_tool(
         latest_hour = int(latest_hour)
     if isinstance(max_suggestions, str):
         max_suggestions = int(max_suggestions)
+    # Keep preferred times as simple HH:MM strings; parsing is handled in google_calendar.py
 
     try:
         logger.info(f"Finding {duration_minutes}-min slots for {len(attendees)} attendees")
@@ -501,6 +525,8 @@ def find_meeting_slots_tool(
             duration_minutes=duration_minutes,
             date_start=date_start,
             date_end=date_end,
+            preferred_time_start=preferred_time_start,
+            preferred_time_end=preferred_time_end,
             earliest_hour=earliest_hour,
             latest_hour=latest_hour,
             max_suggestions=max_suggestions,
@@ -599,14 +625,19 @@ def get_free_busy_tool(
 
 @mcp.tool(
     name="Get Today's Date",
-    description="Get today's date in YYYY-MM-DD format. Doesn't require any input parameters.",
+    description=(
+        "Get today's date with weekday as JSON. Returns: {\"date\": \"YYYY-MM-DD\", \"weekday\": \"Monday\"}. "
+        "Doesn't require any input parameters."
+    ),
 )
 def get_today_date(test) -> str:
-    """Get today's date in YYYY-MM-DD format. Doesn't require any input parameters."""
+    """Return today's date and weekday as a JSON string."""
     logger.debug("get_today_date called")
     logger.debug(f"get_today_date must be empty dict: {test}")
-    result = datetime.datetime.now().strftime("%Y-%m-%d")
-    logger.debug(f"Returning date: {result}")
+    now = datetime.datetime.now()
+    payload = {"date": now.strftime("%Y-%m-%d"), "weekday": now.strftime("%A")}
+    result = json.dumps(payload)
+    logger.debug(f"Returning date payload: {result}")
     return result
 
 
