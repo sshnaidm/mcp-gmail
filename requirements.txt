@@ -4,6 +4,7 @@ langchain
 langchain-core
 langchain-google-genai
 langchain-ollama
+langchain-openai
 
 # Google API client libraries
 google-api-python-client
