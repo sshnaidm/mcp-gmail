@@ -5,6 +5,7 @@ This project provides an AI-powered assistant for managing your Gmail account. I
 ## Features
 
 - **Natural Language Email Search**: Ask questions like "Find emails from my boss this week" or "Summarize the last email from Acme Corp".
+- **Send or Draft Emails**: Create drafts by default (safe), or send immediately; supports CC/BCC and attachments.
 - **Interactive Chat UI**: A web-based chat interface powered by Gradio for easy interaction.
 - **Pluggable LLMs**: Easily switch between different Large Language Models.
   - Google Gemini Pro
@@ -76,6 +77,9 @@ You can also specify a custom path for your credentials file:
 export CREDENTIALS_FILE="/path/to/your/credentials.json"
 ```
 
+Notes:
+- This project requests Gmail scopes for read, compose (draft), and send. If you created `token.json` before these scopes were added, delete `token.json` and re-authenticate to avoid `invalid_scope` errors.
+
 ## Usage
 
 ### Running the Gradio Chat Agent
@@ -116,10 +120,42 @@ This project also includes an alternative server that exposes the email search f
 python mcp_gmail.py
 ```
 
+This exposes tools including fetching emails and sending/drafting emails for MCP-capable clients.
+
+### Python examples
+
+You can also call the Gmail functions directly from Python:
+
+```python
+from gmail import send_email, get_emails
+
+# Create a draft (default safety)
+print(send_email(
+    to="you@example.com",
+    subject="Weekly report",
+    body="Please see the attached report.",
+    attachments=["/absolute/path/to/report.pdf"],
+    draft_mode=True  # default; can be omitted
+))
+
+# Send immediately
+print(send_email(
+    to=["you@example.com", "team@example.com"],
+    subject="Meeting reminder",
+    body="Reminder: meeting at 10:00.",
+    cc="manager@example.com",
+    bcc=["hr@example.com"],
+    draft_mode=False
+))
+
+# Fetch emails (snippet by default)
+print(get_emails("to:me in:inbox", count=5, page=1, full_body=False))
+```
+
 ## Project Structure
 
 - `mailag.py`: The main entry point for the Gradio chat application. It sets up the LangChain agent and the UI.
-- `gmail.py`: Contains the core logic for authenticating with the Google API and fetching emails.
+- `gmail.py`: Contains the core logic for authenticating with the Google API, fetching emails, and sending/drafting emails.
 - `models.py`: Defines the LangChain LLM model configurations (Gemini, Ollama).
 - `mcp_gmail.py`: An alternative entry point that runs a `FastMCP` server to expose the email search function as a tool.
 - `requirements.txt`: A list of Python packages required for the project.
