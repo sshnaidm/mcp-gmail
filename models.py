@@ -12,9 +12,14 @@ gemini = ChatGoogleGenerativeAI(
 
 openai = ChatOpenAI(model="gpt-4o-mini", temperature=0.0, top_p=0.0, api_key=os.getenv("OPENAI_API_KEY"))
 
+
 # ollama based model
-ollama = lambda ol_model: ChatOllama(model=ol_model, temperature=0.0, top_p=0.0, num_ctx=40000)
-#ollama = ChatOllama(model="qwen2.5:7b", temperature=0.0, top_p=0.0, num_ctx=40000)
+def ollama(ol_model):
+    return ChatOllama(model=ol_model, temperature=0.0, top_p=0.0, num_ctx=40000)
+
+
+# ollama = ChatOllama(model="qwen2.5:7b", temperature=0.0, top_p=0.0, num_ctx=40000)
+
 
 def init_llm() -> ChatOpenAI | ChatOllama | ChatGoogleGenerativeAI:
     print("For choosing the model, set the MODEL environment variable to one of: openai, ollama/<model_name>, gemini")
